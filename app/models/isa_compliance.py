@@ -6,17 +6,17 @@ import enum
 
 
 class ComplianceStatus(enum.Enum):
-    COMPLIANT = "compliant"
-    NON_COMPLIANT = "non_compliant"
-    PENDING = "pending"
-    UNDER_REVIEW = "under_review"
+    COMPLIANT = "COMPLIANT"
+    NON_COMPLIANT = "NON_COMPLIANT"
+    PENDING = "PENDING"
+    UNDER_REVIEW = "UNDER_REVIEW"
 
 
 class ZoneType(enum.Enum):
-    OPERATIONAL = "operational"
-    RESTRICTED = "restricted"
-    PROHIBITED = "prohibited"
-    SAFETY = "safety"
+    OPERATIONAL = "OPERATIONAL"
+    RESTRICTED = "RESTRICTED"
+    PROHIBITED = "PROHIBITED"
+    SAFETY = "SAFETY"
 
 
 class ISAStandard(Base):

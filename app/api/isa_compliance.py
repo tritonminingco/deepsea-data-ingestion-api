@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime, timedelta
 from app.database import get_db
@@ -185,8 +185,8 @@ def get_isa_compliance(
 ):
     """Get ISA compliance records with filtering"""
     query = db.query(ISACompliance).options(
-        db.joinedload(ISACompliance.standard),
-        db.joinedload(ISACompliance.zone)
+        joinedload(ISACompliance.standard),
+        joinedload(ISACompliance.zone)
     )
     
     if auv_id:
@@ -206,8 +206,8 @@ def get_isa_compliance(
 def get_isa_compliance_record(compliance_id: int, db: Session = Depends(get_db)):
     """Get a specific ISA compliance record by ID"""
     compliance = db.query(ISACompliance).options(
-        db.joinedload(ISACompliance.standard),
-        db.joinedload(ISACompliance.zone)
+        joinedload(ISACompliance.standard),
+        joinedload(ISACompliance.zone)
     ).filter(ISACompliance.id == compliance_id).first()
     
     if not compliance:
@@ -298,15 +298,15 @@ def get_compliance_dashboard(db: Session = Depends(get_db)):
     
     # Get recent compliance records
     recent_compliance = db.query(ISACompliance).options(
-        db.joinedload(ISACompliance.standard),
-        db.joinedload(ISACompliance.zone)
+        joinedload(ISACompliance.standard),
+        joinedload(ISACompliance.zone)
     ).order_by(desc(ISACompliance.updated_at)).limit(10).all()
     
     # Get upcoming assessments (next 7 days)
     next_week = datetime.utcnow() + timedelta(days=7)
     upcoming_assessments = db.query(ISACompliance).options(
-        db.joinedload(ISACompliance.standard),
-        db.joinedload(ISACompliance.zone)
+        joinedload(ISACompliance.standard),
+        joinedload(ISACompliance.zone)
     ).filter(
         ISACompliance.next_assessment <= next_week
     ).order_by(ISACompliance.next_assessment).limit(10).all()
@@ -332,8 +332,8 @@ def get_auv_compliance(
 ):
     """Get all compliance records for a specific AUV"""
     compliance_records = db.query(ISACompliance).options(
-        db.joinedload(ISACompliance.standard),
-        db.joinedload(ISACompliance.zone)
+        joinedload(ISACompliance.standard),
+        joinedload(ISACompliance.zone)
     ).filter(ISACompliance.auv_id == auv_id).all()
     
     return compliance_records

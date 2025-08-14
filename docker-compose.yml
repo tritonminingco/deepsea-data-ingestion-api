@@ -10,10 +10,9 @@ services:
       POSTGRES_USER: deepsea_user
       POSTGRES_PASSWORD: deepsea_password
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - deepsea_network
     healthcheck:
@@ -27,7 +26,7 @@ services:
     image: redis:7-alpine
     container_name: deepsea_redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -43,7 +42,7 @@ services:
     build: .
     container_name: deepsea_api
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       DATABASE_URL: postgresql://deepsea_user:deepsea_password@postgres:5432/deepsea_db
       REDIS_URL: redis://redis:6379
@@ -77,6 +76,17 @@ services:
       - "5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - deepsea_network
+    depends_on:
+      - postgres
+
+  # Optional: Adminer for lightweight database management
+  adminer:
+    image: adminer:latest
+    container_name: deepsea_adminer
+    ports:
+      - "8081:8080"
     networks:
       - deepsea_network
     depends_on:
