@@ -5,25 +5,25 @@ import enum
 
 
 class AlertSeverity(enum.Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 
 class AlertType(enum.Enum):
-    ENVIRONMENTAL = "environmental"
-    OPERATIONAL = "operational"
-    COMPLIANCE = "compliance"
-    SYSTEM = "system"
-    SAFETY = "safety"
+    ENVIRONMENTAL = "ENVIRONMENTAL"
+    OPERATIONAL = "OPERATIONAL"
+    COMPLIANCE = "COMPLIANCE"
+    SYSTEM = "SYSTEM"
+    SAFETY = "SAFETY"
 
 
 class AlertStatus(enum.Enum):
-    ACTIVE = "active"
-    ACKNOWLEDGED = "acknowledged"
-    RESOLVED = "resolved"
-    DISMISSED = "dismissed"
+    ACTIVE = "ACTIVE"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    RESOLVED = "RESOLVED"
+    DISMISSED = "DISMISSED"
 
 
 class Alert(Base):

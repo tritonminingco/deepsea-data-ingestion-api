@@ -6,7 +6,8 @@ from app.database import get_db
 from app.models.alerts import Alert, AlertSeverity, AlertType, AlertStatus
 from app.schemas.alerts import (
     AlertCreate, AlertUpdate, AlertResponse,
-    AlertQueryParams, AlertSummary, AlertFeedResponse
+    AlertQueryParams, AlertSummary, AlertFeedResponse,
+    BulkAcknowledgeRequest, BulkResolveRequest
 )
 from sqlalchemy import and_, or_, func, desc, text
 import redis
@@ -47,15 +48,15 @@ def create_alert(
 
 @router.get("/", response_model=List[AlertResponse])
 def get_alerts(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    auv_id: Optional[str] = Query(None),
-    alert_type: Optional[AlertType] = Query(None),
-    severity: Optional[AlertSeverity] = Query(None),
-    status: Optional[AlertStatus] = Query(None),
-    start_time: Optional[datetime] = Query(None),
-    end_time: Optional[datetime] = Query(None),
-    search: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0, description="Number of records to skip", example=0),
+    limit: int = Query(100, ge=1, le=1000, description="Number of records to return", example=100),
+    auv_id: Optional[str] = Query(None, description="Filter by AUV ID", example="AUV-001"),
+    alert_type: Optional[AlertType] = Query(None, description="Filter by alert type", example=AlertType.ENVIRONMENTAL),
+    severity: Optional[AlertSeverity] = Query(None, description="Filter by severity", example=AlertSeverity.MEDIUM),
+    status: Optional[AlertStatus] = Query(None, description="Filter by status", example=AlertStatus.ACTIVE),
+    start_time: Optional[datetime] = Query(None, description="Start time for query", example="2025-08-10T00:00:00"),
+    end_time: Optional[datetime] = Query(None, description="End time for query", example="2025-08-15T23:59:59"),
+    search: Optional[str] = Query(None, description="Search in title and description", example="battery"),
     db: Session = Depends(get_db)
 ):
     """Get alerts with filtering and pagination"""
@@ -90,7 +91,7 @@ def get_alert(alert_id: int, db: Session = Depends(get_db)):
     """Get a specific alert by ID"""
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
+        raise HTTPException(status_code=404, detail=f"Alert with ID {alert_id} not found")
     return alert
 
 
@@ -103,7 +104,7 @@ def update_alert(
     """Update an alert"""
     db_alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not db_alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
+        raise HTTPException(status_code=404, detail=f"Alert with ID {alert_id} not found")
     
     update_data = alert_update.dict(exclude_unset=True)
     
@@ -138,7 +139,7 @@ def delete_alert(alert_id: int, db: Session = Depends(get_db)):
     """Delete an alert"""
     db_alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not db_alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
+        raise HTTPException(status_code=404, detail=f"Alert with ID {alert_id} not found")
     
     db.delete(db_alert)
     db.commit()
@@ -148,12 +149,12 @@ def delete_alert(alert_id: int, db: Session = Depends(get_db)):
 # Alert Feed and Summary Endpoints
 @router.get("/feed/", response_model=AlertFeedResponse)
 def get_alert_feed(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
-    auv_id: Optional[str] = Query(None),
-    alert_type: Optional[AlertType] = Query(None),
-    severity: Optional[AlertSeverity] = Query(None),
-    status: Optional[AlertStatus] = Query(None),
+    skip: int = Query(0, ge=0, description="Number of records to skip", example=0),
+    limit: int = Query(50, ge=1, le=200, description="Number of records to return", example=50),
+    auv_id: Optional[str] = Query(None, description="Filter by AUV ID", example="AUV-001"),
+    alert_type: Optional[AlertType] = Query(None, description="Filter by alert type", example=AlertType.ENVIRONMENTAL),
+    severity: Optional[AlertSeverity] = Query(None, description="Filter by severity", example=AlertSeverity.MEDIUM),
+    status: Optional[AlertStatus] = Query(None, description="Filter by status", example=AlertStatus.ACTIVE),
     db: Session = Depends(get_db)
 ):
     """Get alert feed with summary statistics"""
@@ -188,10 +189,10 @@ def get_alert_feed(
 
 @router.get("/summary/", response_model=AlertSummary)
 def get_alert_summary_endpoint(
-    auv_id: Optional[str] = Query(None),
-    alert_type: Optional[AlertType] = Query(None),
-    severity: Optional[AlertSeverity] = Query(None),
-    status: Optional[AlertStatus] = Query(None),
+    auv_id: Optional[str] = Query(None, description="Filter by AUV ID", example="AUV-001"),
+    alert_type: Optional[AlertType] = Query(None, description="Filter by alert type", example=AlertType.ENVIRONMENTAL),
+    severity: Optional[AlertSeverity] = Query(None, description="Filter by severity", example=AlertSeverity.MEDIUM),
+    status: Optional[AlertStatus] = Query(None, description="Filter by status", example=AlertStatus.ACTIVE),
     db: Session = Depends(get_db)
 ):
     """Get alert summary statistics"""
@@ -297,6 +298,102 @@ def get_auv_active_alerts(auv_id: str, db: Session = Depends(get_db)):
     return alerts
 
 
+# Bulk Operations (must come before single alert endpoints to avoid routing conflicts)
+@router.post("/bulk/acknowledge")
+def bulk_acknowledge_alerts(
+    request: BulkAcknowledgeRequest,
+    acknowledged_by: str = Query(..., description="User acknowledging the alerts", example="operator_john"),
+    db: Session = Depends(get_db)
+):
+    """Bulk acknowledge multiple alerts"""
+    alerts = db.query(Alert).filter(Alert.id.in_(request.alert_ids)).all()
+    
+    if not alerts:
+        return {
+            "message": "No alerts found with the provided IDs",
+            "acknowledged_count": 0,
+            "total_alerts": 0,
+            "not_found_ids": request.alert_ids,
+            "status": "not_found"
+        }
+    
+    # Find which alert IDs were not found
+    found_ids = [alert.id for alert in alerts]
+    not_found_ids = [aid for aid in request.alert_ids if aid not in found_ids]
+    
+    acknowledged_count = 0
+    for alert in alerts:
+        if alert.status != AlertStatus.ACKNOWLEDGED:
+            alert.status = AlertStatus.ACKNOWLEDGED
+            alert.acknowledged_by = acknowledged_by
+            alert.acknowledged_at = datetime.utcnow()
+            acknowledged_count += 1
+    
+    db.commit()
+    
+    response = {
+        "message": f"Successfully acknowledged {acknowledged_count} alerts",
+        "acknowledged_count": acknowledged_count,
+        "total_alerts": len(alerts),
+        "status": "success"
+    }
+    
+    if not_found_ids:
+        response["not_found_ids"] = not_found_ids
+        response["message"] += f" ({len(not_found_ids)} alert IDs not found)"
+    
+    return response
+
+
+@router.post("/bulk/resolve")
+def bulk_resolve_alerts(
+    request: BulkResolveRequest,
+    resolved_by: str = Query(..., description="User resolving the alerts", example="operator_jane"),
+    resolution_notes: Optional[str] = Query(None, description="Resolution notes", example="Fixed sensor calibration issue"),
+    db: Session = Depends(get_db)
+):
+    """Bulk resolve multiple alerts"""
+    alerts = db.query(Alert).filter(Alert.id.in_(request.alert_ids)).all()
+    
+    if not alerts:
+        return {
+            "message": "No alerts found with the provided IDs",
+            "resolved_count": 0,
+            "total_alerts": 0,
+            "not_found_ids": request.alert_ids,
+            "status": "not_found"
+        }
+    
+    # Find which alert IDs were not found
+    found_ids = [alert.id for alert in alerts]
+    not_found_ids = [aid for aid in request.alert_ids if aid not in found_ids]
+    
+    resolved_count = 0
+    for alert in alerts:
+        if alert.status != AlertStatus.RESOLVED:
+            alert.status = AlertStatus.RESOLVED
+            alert.resolved_by = resolved_by
+            alert.resolved_at = datetime.utcnow()
+            if resolution_notes:
+                alert.resolution_notes = resolution_notes
+            resolved_count += 1
+    
+    db.commit()
+    
+    response = {
+        "message": f"Successfully resolved {resolved_count} alerts",
+        "resolved_count": resolved_count,
+        "total_alerts": len(alerts),
+        "status": "success"
+    }
+    
+    if not_found_ids:
+        response["not_found_ids"] = not_found_ids
+        response["message"] += f" ({len(not_found_ids)} alert IDs not found)"
+    
+    return response
+
+
 # Alert Management Endpoints
 @router.post("/{alert_id}/acknowledge", response_model=AlertResponse)
 def acknowledge_alert(
@@ -307,7 +404,7 @@ def acknowledge_alert(
     """Acknowledge an alert"""
     db_alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not db_alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
+        raise HTTPException(status_code=404, detail=f"Alert with ID {alert_id} not found")
     
     if db_alert.status == AlertStatus.ACKNOWLEDGED:
         raise HTTPException(status_code=400, detail="Alert already acknowledged")
@@ -341,7 +438,7 @@ def resolve_alert(
     """Resolve an alert"""
     db_alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not db_alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
+        raise HTTPException(status_code=404, detail=f"Alert with ID {alert_id} not found")
     
     if db_alert.status == AlertStatus.RESOLVED:
         raise HTTPException(status_code=400, detail="Alert already resolved")
@@ -365,68 +462,6 @@ def resolve_alert(
     redis_client.publish("alerts:resolved", str(status_data))
     
     return db_alert
-
-
-# Bulk Operations
-@router.post("/bulk/acknowledge")
-def bulk_acknowledge_alerts(
-    alert_ids: List[int],
-    acknowledged_by: str = Query(..., description="User acknowledging the alerts"),
-    db: Session = Depends(get_db)
-):
-    """Bulk acknowledge multiple alerts"""
-    alerts = db.query(Alert).filter(Alert.id.in_(alert_ids)).all()
-    
-    if not alerts:
-        raise HTTPException(status_code=404, detail="No alerts found")
-    
-    acknowledged_count = 0
-    for alert in alerts:
-        if alert.status != AlertStatus.ACKNOWLEDGED:
-            alert.status = AlertStatus.ACKNOWLEDGED
-            alert.acknowledged_by = acknowledged_by
-            alert.acknowledged_at = datetime.utcnow()
-            acknowledged_count += 1
-    
-    db.commit()
-    
-    return {
-        "message": f"Successfully acknowledged {acknowledged_count} alerts",
-        "acknowledged_count": acknowledged_count,
-        "total_alerts": len(alerts)
-    }
-
-
-@router.post("/bulk/resolve")
-def bulk_resolve_alerts(
-    alert_ids: List[int],
-    resolved_by: str = Query(..., description="User resolving the alerts"),
-    resolution_notes: Optional[str] = Query(None, description="Resolution notes"),
-    db: Session = Depends(get_db)
-):
-    """Bulk resolve multiple alerts"""
-    alerts = db.query(Alert).filter(Alert.id.in_(alert_ids)).all()
-    
-    if not alerts:
-        raise HTTPException(status_code=404, detail="No alerts found")
-    
-    resolved_count = 0
-    for alert in alerts:
-        if alert.status != AlertStatus.RESOLVED:
-            alert.status = AlertStatus.RESOLVED
-            alert.resolved_by = resolved_by
-            alert.resolved_at = datetime.utcnow()
-            if resolution_notes:
-                alert.resolution_notes = resolution_notes
-            resolved_count += 1
-    
-    db.commit()
-    
-    return {
-        "message": f"Successfully resolved {resolved_count} alerts",
-        "resolved_count": resolved_count,
-        "total_alerts": len(alerts)
-    }
 
 
 # Analytics Endpoints

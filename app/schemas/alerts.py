@@ -5,25 +5,25 @@ from enum import Enum
 
 
 class AlertSeverity(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 
 class AlertType(str, Enum):
-    ENVIRONMENTAL = "environmental"
-    OPERATIONAL = "operational"
-    COMPLIANCE = "compliance"
-    SYSTEM = "system"
-    SAFETY = "safety"
+    ENVIRONMENTAL = "ENVIRONMENTAL"
+    OPERATIONAL = "OPERATIONAL"
+    COMPLIANCE = "COMPLIANCE"
+    SYSTEM = "SYSTEM"
+    SAFETY = "SAFETY"
 
 
 class AlertStatus(str, Enum):
-    ACTIVE = "active"
-    ACKNOWLEDGED = "acknowledged"
-    RESOLVED = "resolved"
-    DISMISSED = "dismissed"
+    ACTIVE = "ACTIVE"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    RESOLVED = "RESOLVED"
+    DISMISSED = "DISMISSED"
 
 
 # Alert Schemas
@@ -97,3 +97,26 @@ class AlertFeedResponse(BaseModel):
     summary: AlertSummary
     total_count: int
     has_more: bool
+
+
+# Bulk Operation Schemas
+class BulkAcknowledgeRequest(BaseModel):
+    alert_ids: List[int] = Field(..., description="List of alert IDs to acknowledge", example=[3, 5, 9])
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "alert_ids": [3, 5, 9]
+            }
+        }
+
+
+class BulkResolveRequest(BaseModel):
+    alert_ids: List[int] = Field(..., description="List of alert IDs to resolve", example=[3, 5, 9])
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "alert_ids": [3, 5, 9]
+            }
+        }

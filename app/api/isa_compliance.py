@@ -31,9 +31,9 @@ def create_isa_standard(
 
 @router.get("/standards/", response_model=List[ISAStandardResponse])
 def get_isa_standards(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    category: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0, description="Number of records to skip", example=0),
+    limit: int = Query(100, ge=1, le=1000, description="Number of records to return", example=100),
+    category: Optional[str] = Query(None, description="Filter by category", example="environmental"),
     db: Session = Depends(get_db)
 ):
     """Get all ISA standards with optional filtering"""
@@ -103,9 +103,9 @@ def create_isa_zone(
 
 @router.get("/zones/", response_model=List[ISAZoneResponse])
 def get_isa_zones(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    zone_type: Optional[ZoneType] = Query(None),
+    skip: int = Query(0, ge=0, description="Number of records to skip", example=0),
+    limit: int = Query(100, ge=1, le=1000, description="Number of records to return", example=100),
+    zone_type: Optional[ZoneType] = Query(None, description="Filter by zone type", example=ZoneType.OPERATIONAL),
     db: Session = Depends(get_db)
 ):
     """Get all ISA zones with optional filtering"""
